@@ -1,0 +1,124 @@
+version: "3.9"
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: topdev
+      POSTGRES_PASSWORD: topdev
+      POSTGRES_DB: topdev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U topdev" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - topdev-network
+
+  # ─── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - topdev-network
+
+  # ─── Backend API ───────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://topdev:topdev@postgres:5432/topdev
+      SYNC_DATABASE_URL: postgresql://topdev:topdev@postgres:5432/topdev
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - topdev-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Celery Worker ─────────────────────────────────────────────
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://topdev:topdev@postgres:5432/topdev
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - topdev-network
+    restart: unless-stopped
+
+  # ─── Celery Flower (monitoring) ─────────────────────────────────
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.workers.celery_app flower --port=5555
+    env_file: .env
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    networks:
+      - topdev-network
+    profiles:
+      - dev
+
+  # ─── Migrations (runs once, then exits) ────────────────────────
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      sh -c "alembic upgrade head && python scripts/seed.py"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://topdev:topdev@postgres:5432/topdev
+      SYNC_DATABASE_URL: postgresql://topdev:topdev@postgres:5432/topdev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - topdev-network
+    restart: "no"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+
+networks:
+  topdev-network:
+    driver: bridge

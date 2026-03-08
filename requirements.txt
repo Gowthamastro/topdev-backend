@@ -1,0 +1,58 @@
+# Core
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.27
+asyncpg==0.29.0
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+python-dotenv==1.0.1
+
+# Validation
+pydantic==2.6.1
+pydantic-settings==2.2.1
+email-validator==2.1.0.post1
+
+# Redis + Celery
+redis==5.0.1
+celery==5.3.6
+flower==2.0.1
+
+# AI
+openai==1.12.0
+tiktoken==0.6.0
+
+# Stripe
+stripe==8.4.0
+
+# Email
+sendgrid==6.11.0
+
+# AWS S3
+boto3==1.34.44
+
+# HTTP Client
+httpx==0.26.0
+
+# Utilities
+Pillow==10.2.0
+python-slugify==8.0.4
+pytz==2024.1
+structlog==24.1.0
+slowapi==0.1.9
+
+# PDF Generation
+reportlab==4.1.0
+weasyprint==61.2
+
+# Testing
+pytest==8.0.1
+pytest-asyncio==0.23.5
+httpx==0.26.0

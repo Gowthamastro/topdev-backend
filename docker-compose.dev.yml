@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  postgres:
+    ports:
+      - "5433:5432"
+
+volumes:
+  frontend_node_modules:
