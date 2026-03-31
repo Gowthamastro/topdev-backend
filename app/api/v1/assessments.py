@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.deps import require_client, get_current_user
 from app.models.user import User, UserRole
@@ -12,11 +13,12 @@ from app.models.client import Client
 from app.models.candidate import Candidate
 from app.models.job import JobDescription
 from app.models.assessment import Assessment
-from app.models.test_attempt import TestAttempt, AttemptStatus
-from app.models.admin import PlatformSettings
+from app.models.test_attempt import TestAttempt, AttemptStatus, RatingBadge
+from app.models.admin import PlatformSettings, ScoringWeights
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.workers.tasks import send_test_invitation_task
+from app.ai.gemini_service import score_answers
 import secrets
 
 router = APIRouter(prefix="/assessments", tags=["assessments"])
@@ -125,7 +127,116 @@ async def list_attempts(jd_id: int, db: AsyncSession = Depends(get_db), current_
         "candidate_name": a.candidate.user.full_name if a.candidate and a.candidate.user else "Unknown",
         "candidate_email": a.candidate.user.email if a.candidate and a.candidate.user else "Unknown",
         "status": getattr(a.status, "value", a.status),
-        "score": a.total_score,
+        "total_score": a.total_score,
+        "technical_score": a.technical_score,
+        "communication_score": a.communication_score,
+        "cultural_fit_score": a.cultural_fit_score,
         "badge": getattr(a.rating_badge, "value", a.rating_badge) if a.rating_badge else None,
-        "qualified": a.is_qualified
+        "qualified": a.is_qualified,
+        "ai_feedback": a.ai_feedback
     } for a in attempts]
+
+
+@router.get("/job/{jd_id}/details")
+async def get_assessment_details(jd_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_client)):
+    # Verify client owns this job
+    client_res = await db.execute(select(Client).where(Client.user_id == current_user.id))
+    client = client_res.scalar_one_or_none()
+    jd_res = await db.execute(select(JobDescription).where(JobDescription.id == jd_id))
+    jd = jd_res.scalar_one_or_none()
+    if not jd or jd.client_id != client.id:
+        raise HTTPException(403, "Access denied")
+
+    # Get assessment and eager load its questions
+    assmt_res = await db.execute(
+        select(Assessment)
+        .options(joinedload(Assessment.questions))
+        .where(Assessment.job_description_id == jd_id)
+    )
+    assessment = assmt_res.scalars().first()
+    
+    if not assessment:
+        raise HTTPException(404, "Assessment not found for this Job Description")
+
+    return {
+        "id": assessment.id,
+        "title": assessment.title,
+        "description": assessment.description,
+        "mcq_count": assessment.mcq_count,
+        "coding_count": assessment.coding_count,
+        "scenario_count": assessment.scenario_count,
+        "time_limit_minutes": assessment.time_limit_minutes,
+        "questions": [
+            {
+                "id": q.id,
+                "type": getattr(q.question_type, "value", q.question_type),
+                "text": q.question_text,
+                "options": q.options,
+                "correct_answer": q.correct_answer,
+                "explanation": q.explanation,
+                "difficulty": q.difficulty,
+                "skills_tested": q.skills_tested,
+                "max_score": q.max_score,
+                "order_index": q.order_index
+            } for q in sorted(assessment.questions, key=lambda x: x.order_index) if assessment.questions
+        ]
+    }
+
+@router.get("/test/{token}")
+async def get_test_for_candidate(token: str, db: AsyncSession = Depends(get_db)):
+    """Fetch test details for a candidate using their secure token."""
+    # Find active attempt by token
+    attempt_res = await db.execute(
+        select(TestAttempt)
+        .options(selectinload(TestAttempt.candidate).selectinload(Candidate.user))
+        .where(TestAttempt.token == token)
+    )
+    attempt = attempt_res.scalar_one_or_none()
+    
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Test link invalid or not found")
+        
+    if attempt.token_expires_at and attempt.token_expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Test link has expired")
+        
+    if attempt.status != AttemptStatus.INVITED and attempt.status != AttemptStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail=f"Test attempt is already {getattr(attempt.status, 'value', attempt.status)}")
+        
+    # Get the assessment and eager load the questions
+    assmt_res = await db.execute(
+        select(Assessment)
+        .options(selectinload(Assessment.questions))
+        .where(Assessment.id == attempt.assessment_id)
+    )
+    assessment = assmt_res.scalars().first()
+    
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+        
+    # Mark test as IN_PROGRESS if this is the first time they open it
+    if attempt.status == AttemptStatus.INVITED:
+        attempt.status = AttemptStatus.IN_PROGRESS
+        if not attempt.started_at:
+            attempt.started_at = datetime.now(timezone.utc)
+        await db.commit()
+
+    return {
+        "attempt_id": attempt.id,
+        "candidate_name": attempt.candidate.user.full_name,
+        "assessment_title": assessment.title,
+        "time_limit_minutes": assessment.time_limit_minutes,
+        "has_coding_round": assessment.has_coding_round,
+        "questions": [
+            {
+                "id": q.id,
+                "type": getattr(q.question_type, "value", q.question_type),
+                "text": q.question_text,
+                # ONLY return options, NEVER correct_answer or explanation
+                "options": q.options,
+                "difficulty": q.difficulty,
+                "max_score": q.max_score,
+                "order_index": q.order_index
+            } for q in sorted(assessment.questions, key=lambda x: x.order_index) if assessment.questions
+        ]
+    }
+

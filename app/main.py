@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from fastapi.exceptions import RequestValidationError
 from app.core.config import settings
 from app.api.router import api_router
 
@@ -43,6 +44,27 @@ async def log_requests(request: Request, call_next):
     return response
 
 # ─── Global Exception Handler ─────────────────────────────────────────────────
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Try to grab form keys for debugging
+    form_keys = []
+    try:
+        form = await request.form()
+        form_keys = list(form.keys())
+    except Exception:
+        pass
+
+    log.error("validation_error", 
+              path=request.url.path, 
+              detail=exc.errors(),
+              headers=dict(request.headers),
+              form_keys=form_keys)
+              
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+    )
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     log.error("unhandled_exception", path=request.url.path, error=str(exc))

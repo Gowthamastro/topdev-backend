@@ -10,7 +10,7 @@ from app.models.user import User
 from app.models.client import Client
 from app.models.job import JobDescription, JDStatus, DifficultyLevel
 from app.models.assessment import Assessment, AssessmentStatus
-from app.ai.openai_service import parse_job_description, generate_assessment as ai_generate_assessment
+from app.ai.gemini_service import parse_job_description, generate_assessment as ai_generate_assessment
 from app.services.storage_service import upload_file, get_signed_url
 from app.models.admin import PlatformSettings, ScoringWeights
 from app.services.scoring_service import PLAN_ROLE_LIMITS
@@ -112,7 +112,9 @@ async def upload_jd(
             db=db,
         )
         questions_data = gen.get("questions", [])
-    except Exception:
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         questions_data = []
 
     from app.models.assessment import Question, QuestionType

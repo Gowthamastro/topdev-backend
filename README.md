@@ -20,7 +20,7 @@ Edit `.env` and fill in:
 |---|---|
 | `SECRET_KEY` | Random secret (use `openssl rand -hex 32`) |
 | `JWT_SECRET_KEY` | JWT signing secret |
-| `OPENAI_API_KEY` | OpenAI API key for AI assessments |
+| `GEMINI_API_KEY` | Gemini API key for AI assessments |
 | `STRIPE_SECRET_KEY` | Stripe secret key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret |
 | `SENDGRID_API_KEY` | SendGrid API key for emails |
@@ -69,7 +69,7 @@ TopDev/
 │   │   │   ├── payments.py     # Stripe webhooks
 │   │   │   └── analytics.py    # Metrics & reporting
 │   │   ├── models/             # SQLAlchemy ORM models (15 tables)
-│   │   ├── ai/                 # OpenAI integration layer
+│   │   ├── ai/                 # Gemini integration layer
 │   │   ├── services/           # Email, S3 storage, scoring
 │   │   └── workers/            # Celery async tasks
 │   ├── alembic/                # Database migrations

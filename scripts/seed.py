@@ -121,7 +121,7 @@ async def seed():
         # Scoring weights
         existing_weights = await db.execute(select(ScoringWeights))
         if not existing_weights.scalar_one_or_none():
-            db.add(ScoringWeights(name="default", technical_weight=0.40, coding_weight=0.40, problem_solving_weight=0.20, qualification_threshold=60.0, is_default=True))
+            db.add(ScoringWeights(name="default", technical_weight=0.40, communication_weight=0.40, cultural_fit_weight=0.20, qualification_threshold=60.0, is_default=True))
         print("  ✅ Default scoring weights seeded")
 
         # Email templates

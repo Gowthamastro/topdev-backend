@@ -9,12 +9,12 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     SECRET_KEY: str = "change-me-in-production"
     # Comma-separated list (works well in .env). Parsed via `allowed_origins_list`.
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
     API_V1_PREFIX: str = "/api/v1"
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://topdev:topdev@localhost:5432/topdev"
-    SYNC_DATABASE_URL: str = "postgresql://topdev:topdev@localhost:5432/topdev"
+    DATABASE_URL: str = "postgresql+asyncpg://topdev:topdev@127.0.0.1:5432/topdev"
+    SYNC_DATABASE_URL: str = "postgresql://topdev:topdev@127.0.0.1:5432/topdev"
 
     # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # OpenAI
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4-turbo-preview"
+    # Gemini
+    GEMINI_API_KEY: str = "AIzaSyCmEaLO4v4wFURqJIbt4TljTTSBdnCrslY"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""
@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()

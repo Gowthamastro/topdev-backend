@@ -11,7 +11,7 @@ def score_test_attempt_task(self, attempt_id: int):
     from app.core.database import AsyncSessionLocal
     from app.models.test_attempt import TestAttempt, AttemptStatus
     from app.models.assessment import Question
-    from app.ai.openai_service import score_answers
+    from app.ai.gemini_service import score_answers
     from app.services.scoring_service import get_active_weights, compute_weighted_score, assign_badge
     from app.services.email_service import send_result_notification
     from sqlalchemy import select
@@ -45,7 +45,7 @@ def score_test_attempt_task(self, attempt_id: int):
             scored = await score_answers("Technical assessment", qa_pairs, db)
 
             # Aggregate by category
-            cats = {"technical": (0, 0), "coding": (0, 0), "problem_solving": (0, 0)}
+            cats = {"technical": (0, 0), "communication": (0, 0), "cultural_fit": (0, 0)}
             for s in scored:
                 cat = s.get("category", "technical")
                 if cat not in cats:
@@ -55,8 +55,8 @@ def score_test_attempt_task(self, attempt_id: int):
 
             weights = await get_active_weights(db)
             scores = compute_weighted_score(
-                cats["technical"][0], cats["coding"][0], cats["problem_solving"][0],
-                cats["technical"][1] or 1, cats["coding"][1] or 1, cats["problem_solving"][1] or 1,
+                cats["technical"][0], cats["communication"][0], cats["cultural_fit"][0],
+                cats["technical"][1] or 1, cats["communication"][1] or 1, cats["cultural_fit"][1] or 1,
                 weights,
             )
 
@@ -64,8 +64,8 @@ def score_test_attempt_task(self, attempt_id: int):
 
             attempt.total_score = scores["total_score"]
             attempt.technical_score = scores["technical_score"]
-            attempt.coding_score = scores["coding_score"]
-            attempt.problem_solving_score = scores["problem_solving_score"]
+            attempt.communication_score = scores["communication_score"]
+            attempt.cultural_fit_score = scores["cultural_fit_score"]
             attempt.rating_badge = badge
             attempt.is_qualified = qualified
             attempt.score_breakdown = scored

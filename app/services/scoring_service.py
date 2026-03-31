@@ -25,8 +25,8 @@ async def get_active_weights(db: AsyncSession) -> ScoringWeights:
         # Fallback to defaults
         return ScoringWeights(
             technical_weight=0.40,
-            coding_weight=0.40,
-            problem_solving_weight=0.20,
+            communication_weight=0.40,
+            cultural_fit_weight=0.20,
             qualification_threshold=60.0,
         )
     return weights
@@ -34,28 +34,28 @@ async def get_active_weights(db: AsyncSession) -> ScoringWeights:
 
 def compute_weighted_score(
     technical_raw: float,
-    coding_raw: float,
-    problem_solving_raw: float,
+    communication_raw: float,
+    cultural_fit_raw: float,
     technical_max: float,
-    coding_max: float,
-    problem_solving_max: float,
+    communication_max: float,
+    cultural_fit_max: float,
     weights: ScoringWeights,
 ) -> dict:
     """Compute final 0-100 score from raw category scores."""
     t_pct = (technical_raw / technical_max * 100) if technical_max > 0 else 0
-    c_pct = (coding_raw / coding_max * 100) if coding_max > 0 else 0
-    ps_pct = (problem_solving_raw / problem_solving_max * 100) if problem_solving_max > 0 else 0
+    c_pct = (communication_raw / communication_max * 100) if communication_max > 0 else 0
+    cf_pct = (cultural_fit_raw / cultural_fit_max * 100) if cultural_fit_max > 0 else 0
 
     final = (
         t_pct * weights.technical_weight
-        + c_pct * weights.coding_weight
-        + ps_pct * weights.problem_solving_weight
+        + c_pct * weights.communication_weight
+        + cf_pct * weights.cultural_fit_weight
     )
 
     return {
         "technical_score": round(t_pct, 2),
-        "coding_score": round(c_pct, 2),
-        "problem_solving_score": round(ps_pct, 2),
+        "communication_score": round(c_pct, 2),
+        "cultural_fit_score": round(cf_pct, 2),
         "total_score": round(final, 2),
     }
 

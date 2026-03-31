@@ -15,6 +15,15 @@ class AttemptStatus(str, enum.Enum):
     EXPIRED = "expired"
 
 
+class PipelineStage(str, enum.Enum):
+    SOURCED = "sourced"
+    APPLIED = "applied"
+    SCREENED = "screened"
+    INTERVIEW = "interview"
+    OFFERED = "offered"
+    HIRED = "hired"
+
+
 class RatingBadge(str, enum.Enum):
     ELITE = "elite"          # 90+
     STRONG = "strong"        # 75-89
@@ -35,6 +44,7 @@ class TestAttempt(Base):
     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     status: Mapped[str] = mapped_column(String(50), default=AttemptStatus.INVITED.value)
+    pipeline_stage: Mapped[str] = mapped_column(String(50), default=PipelineStage.SOURCED.value)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     answers: Mapped[dict | None] = mapped_column(JSONB)  # {question_id: answer_text}
@@ -42,8 +52,8 @@ class TestAttempt(Base):
     # Scoring
     total_score: Mapped[float | None] = mapped_column(Float)
     technical_score: Mapped[float | None] = mapped_column(Float)
-    coding_score: Mapped[float | None] = mapped_column(Float)
-    problem_solving_score: Mapped[float | None] = mapped_column(Float)
+    communication_score: Mapped[float | None] = mapped_column(Float)
+    cultural_fit_score: Mapped[float | None] = mapped_column(Float)
     rating_badge: Mapped[str | None] = mapped_column(String(50))
     is_qualified: Mapped[bool] = mapped_column(Boolean, default=False)
     score_breakdown: Mapped[dict | None] = mapped_column(JSONB)

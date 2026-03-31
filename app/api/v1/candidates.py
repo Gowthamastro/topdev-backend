@@ -86,7 +86,7 @@ async def get_test_by_token(token: str, db: AsyncSession = Depends(get_db)):
         "questions": [
             {
                 "id": q.id,
-                "type": q.question_type.value,
+                "type": getattr(q.question_type, "value", q.question_type),
                 "text": q.question_text,
                 "options": q.options,
                 "order": q.order_index,
@@ -146,8 +146,8 @@ async def get_results(attempt_id: int, db: AsyncSession = Depends(get_db), curre
         "status": attempt.status.value,
         "total_score": attempt.total_score,
         "technical_score": attempt.technical_score,
-        "coding_score": attempt.coding_score,
-        "problem_solving_score": attempt.problem_solving_score,
+        "communication_score": attempt.communication_score,
+        "cultural_fit_score": attempt.cultural_fit_score,
         "rating_badge": attempt.rating_badge.value if attempt.rating_badge else None,
         "is_qualified": attempt.is_qualified,
     }

@@ -92,8 +92,8 @@ async def get_scoring_weights(db: AsyncSession = Depends(get_db), _: User = Depe
 
 class ScoringWeightsUpdate(BaseModel):
     technical_weight: float
-    coding_weight: float
-    problem_solving_weight: float
+    communication_weight: float
+    cultural_fit_weight: float
     qualification_threshold: float
 
 
@@ -105,7 +105,7 @@ async def update_scoring_weights(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    total = data.technical_weight + data.coding_weight + data.problem_solving_weight
+    total = data.technical_weight + data.communication_weight + data.cultural_fit_weight
     if abs(total - 1.0) > 0.01:
         raise HTTPException(400, f"Weights must sum to 1.0, got {total}")
     result = await db.execute(select(ScoringWeights).where(ScoringWeights.id == weights_id))
@@ -113,8 +113,8 @@ async def update_scoring_weights(
     if not weights:
         raise HTTPException(404, "Weights not found")
     weights.technical_weight = data.technical_weight
-    weights.coding_weight = data.coding_weight
-    weights.problem_solving_weight = data.problem_solving_weight
+    weights.communication_weight = data.communication_weight
+    weights.cultural_fit_weight = data.cultural_fit_weight
     weights.qualification_threshold = data.qualification_threshold
     await log_audit_event(
         db=db,
