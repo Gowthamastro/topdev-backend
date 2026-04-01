@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Gemini
-    GEMINI_API_KEY: str = "AIzaSyCmEaLO4v4wFURqJIbt4TljTTSBdnCrslY"
+    GEMINI_API_KEY: str = ""  # Set via .env — NEVER hardcode API keys
     GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # Stripe
