@@ -16,6 +16,18 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://topdev:topdev@127.0.0.1:5432/topdev"
     SYNC_DATABASE_URL: str = "postgresql://topdev:topdev@127.0.0.1:5432/topdev"
 
+    @property
+    def get_database_url(self) -> str:
+        if self.DATABASE_URL.startswith("postgres://"):
+            url = self.DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        else:
+            url = self.DATABASE_URL
+            
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+
     # Redis / Celery
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
