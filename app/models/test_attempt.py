@@ -37,7 +37,7 @@ class TestAttempt(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     assessment_id: Mapped[int] = mapped_column(Integer, ForeignKey("assessments.id", ondelete="CASCADE"), index=True)
     candidate_id: Mapped[int] = mapped_column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
-    job_description_id: Mapped[int] = mapped_column(Integer, ForeignKey("job_descriptions.id"), index=True)
+    job_description_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("job_descriptions.id"), index=True, nullable=True)
 
     # Secure token for test link
     token: Mapped[str] = mapped_column(String(255), unique=True, index=True, default=lambda: secrets.token_urlsafe(32))

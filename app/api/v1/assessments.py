@@ -199,7 +199,7 @@ async def get_test_for_candidate(token: str, db: AsyncSession = Depends(get_db))
     if attempt.token_expires_at and attempt.token_expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Test link has expired")
         
-    if attempt.status != AttemptStatus.INVITED and attempt.status != AttemptStatus.IN_PROGRESS:
+    if attempt.status != AttemptStatus.INVITED and attempt.status != AttemptStatus.STARTED:
         raise HTTPException(status_code=400, detail=f"Test attempt is already {getattr(attempt.status, 'value', attempt.status)}")
         
     # Get the assessment and eager load the questions
@@ -213,9 +213,9 @@ async def get_test_for_candidate(token: str, db: AsyncSession = Depends(get_db))
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
         
-    # Mark test as IN_PROGRESS if this is the first time they open it
+    # Mark test as STARTED if this is the first time they open it
     if attempt.status == AttemptStatus.INVITED:
-        attempt.status = AttemptStatus.IN_PROGRESS
+        attempt.status = AttemptStatus.STARTED
         if not attempt.started_at:
             attempt.started_at = datetime.now(timezone.utc)
         await db.commit()

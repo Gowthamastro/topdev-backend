@@ -47,9 +47,10 @@ pytz==2024.1
 structlog==24.1.0
 slowapi==0.1.9
 
-# PDF Generation
+# PDF Processing
 reportlab==4.1.0
 weasyprint==61.2
+PyPDF2==3.0.1
 
 # Testing
 pytest==8.0.1

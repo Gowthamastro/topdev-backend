@@ -13,6 +13,12 @@ from app.models.test_attempt import TestAttempt, AttemptStatus
 from app.models.assessment import Assessment, Question
 from app.models.job import JobDescription
 from app.models.admin import PlatformSettings
+import io
+try:
+    import PyPDF2
+except ImportError:
+    PyPDF2 = None
+from app.ai.gemini_service import parse_resume_for_profile, generate_assessment
 from app.services.storage_service import upload_file, get_signed_url
 from app.workers.tasks import score_test_attempt_task
 from app.core.config import settings
@@ -151,3 +157,192 @@ async def get_results(attempt_id: int, db: AsyncSession = Depends(get_db), curre
         "rating_badge": attempt.rating_badge.value if attempt.rating_badge else None,
         "is_qualified": attempt.is_qualified,
     }
+
+# ─── Onboarding & Matching ───────────────────────────────────────────────────
+
+class OnboardRequest(BaseModel):
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    years_of_experience: Optional[int] = None
+    experience_level: Optional[str] = None
+    headline: Optional[str] = None
+    bio: Optional[str] = None
+    skills: Optional[list[str]] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+
+@router.post("/parse-resume")
+async def parse_resume_endpoint(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_candidate),
+):
+    if not PyPDF2:
+        raise HTTPException(500, "PyPDF2 is not installed on the server backend.")
+    content = await file.read()
+    try:
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+    except Exception as e:
+        raise HTTPException(400, f"Could not read PDF: {str(e)}")
+    
+    parsed = await parse_resume_for_profile(text, db)
+    return parsed
+
+@router.post("/onboard")
+async def onboard_candidate(
+    data: OnboardRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_candidate),
+):
+    result = await db.execute(select(Candidate).where(Candidate.user_id == current_user.id))
+    candidate = result.scalar_one_or_none()
+    if not candidate:
+        raise HTTPException(404, "Candidate not found")
+        
+    candidate.phone = data.phone
+    candidate.location = data.location
+    candidate.years_of_experience = data.years_of_experience
+    candidate.experience_level = data.experience_level
+    candidate.headline = data.headline
+    candidate.bio = data.bio
+    candidate.skills = data.skills
+    candidate.linkedin_url = data.linkedin_url
+    candidate.github_url = data.github_url
+    candidate.portfolio_url = data.portfolio_url
+    
+    await db.commit()
+    
+    # Generate generic Assessment for this candidate if they provided skills
+    if candidate.skills:
+        try:
+            gen_data = await generate_assessment(
+                role=data.headline or "Software Engineer",
+                skills=candidate.skills,
+                seniority=data.experience_level or "mid",
+                years_exp=data.years_of_experience or 3,
+                difficulty="intermediate",
+                mcq_count=10,
+                coding_count=1,
+                scenario_count=2,
+                db=db
+            )
+            
+            assessment = Assessment(
+                title=f"General Screening Test - {current_user.full_name}",
+                has_coding_round=True,
+                mcq_count=10,
+                coding_count=1,
+                scenario_count=2,
+                time_limit_minutes=60
+            )
+            db.add(assessment)
+            await db.flush()
+            
+            questions_data = gen_data.get("questions", [])
+            for i, q in enumerate(questions_data):
+                from app.models.assessment import QuestionType
+                qt = QuestionType(q.get("question_type", "mcq"))
+                question = Question(
+                    assessment_id=assessment.id,
+                    question_type=qt,
+                    question_text=q.get("question_text", ""),
+                    options=q.get("options"),
+                    correct_answer=q.get("correct_answer"),
+                    explanation=q.get("explanation"),
+                    difficulty=q.get("difficulty", "intermediate"),
+                    skills_tested=q.get("skills_tested", []),
+                    max_score=q.get("max_score", 10),
+                    order_index=i,
+                )
+                db.add(question)
+                
+            attempt = TestAttempt(
+                assessment_id=assessment.id,
+                candidate_id=candidate.id,
+                status=AttemptStatus.INVITED
+            )
+            db.add(attempt)
+            await db.commit()
+            
+        except Exception as e:
+            print("Failed to generate screening test:", e)
+            
+    return {"message": "Onboarding complete"}
+
+
+@router.get("/matched-jobs")
+async def get_matched_jobs(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_candidate)):
+    result = await db.execute(select(Candidate).where(Candidate.user_id == current_user.id))
+    candidate = result.scalar_one_or_none()
+    if not candidate:
+        raise HTTPException(404, "Candidate not found")
+        
+    jd_res = await db.execute(select(JobDescription).order_by(JobDescription.id.desc()))
+    jds = jd_res.scalars().all()
+    
+    matched = []
+    cand_skills = set(s.lower() for s in (candidate.skills or []))
+    for j in jds:
+        req_skills = set(s.lower() for s in (j.required_skills or []))
+        match_count = len(cand_skills.intersection(req_skills))
+        match_pct = int((match_count / max(len(req_skills), 1)) * 100) if req_skills else 50
+        
+        # Check if already applied
+        att_res = await db.execute(select(TestAttempt).where(TestAttempt.candidate_id == candidate.id, TestAttempt.job_description_id == j.id))
+        existing = att_res.scalar_one_or_none()
+        
+        # Get Job's Client Company Name
+        from app.models.client import Client
+        client_res = await db.execute(select(Client).where(Client.id == j.client_id))
+        client = client_res.scalar_one_or_none()
+        
+        matched.append({
+            "id": j.id,
+            "title": j.title,
+            "company": client.company_name if client else "TopDev Client",
+            "difficulty": getattr(j.difficulty_level, "value", j.difficulty_level) if j.difficulty_level else None,
+            "skills": j.required_skills,
+            "match_percent": match_pct,
+            "has_applied": bool(existing),
+            "created_at": j.created_at
+        })
+        
+    matched.sort(key=lambda x: x["match_percent"], reverse=True)
+    return matched
+
+
+@router.post("/jobs/{job_id}/apply")
+async def apply_job(job_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_candidate)):
+    result = await db.execute(select(Candidate).where(Candidate.user_id == current_user.id))
+    candidate = result.scalar_one_or_none()
+    
+    jd_res = await db.execute(select(JobDescription).where(JobDescription.id == job_id))
+    jd = jd_res.scalar_one_or_none()
+    if not jd:
+        raise HTTPException(404, "Job not found")
+        
+    # Job has assessments?
+    ass_res = await db.execute(select(Assessment).where(Assessment.job_description_id == jd.id))
+    assessment = ass_res.scalar_one_or_none()
+    if not assessment:
+        raise HTTPException(400, "Job has no assessment configured")
+        
+    # Check if already applied
+    att_res = await db.execute(select(TestAttempt).where(TestAttempt.candidate_id == candidate.id, TestAttempt.job_description_id == jd.id))
+    existing = att_res.scalar_one_or_none()
+    if existing:
+        raise HTTPException(400, "Already applied to this job")
+        
+    attempt = TestAttempt(
+        assessment_id=assessment.id,
+        candidate_id=candidate.id,
+        job_description_id=jd.id,
+        status=AttemptStatus.INVITED
+    )
+    db.add(attempt)
+    await db.commit()
+    return {"message": "Applied successfully", "token": attempt.token}

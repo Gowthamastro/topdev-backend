@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # Gemini
     GEMINI_API_KEY: str = ""  # Set via .env — NEVER hardcode API keys
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-1.5-flash"
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""
