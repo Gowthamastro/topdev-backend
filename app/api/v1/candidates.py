@@ -57,6 +57,62 @@ async def upload_resume(
     return {"message": "Resume uploaded", "s3_key": s3_key}
 
 
+# ─── My Attempts (Dashboard) ──────────────────────────────────────────────────
+
+@router.get("/my-attempts")
+async def get_my_attempts(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_candidate)):
+    """Returns all test attempts for the logged-in candidate — for the dashboard."""
+    result = await db.execute(select(Candidate).where(Candidate.user_id == current_user.id))
+    candidate = result.scalar_one_or_none()
+    if not candidate:
+        raise HTTPException(404, "Candidate not found")
+
+    att_res = await db.execute(
+        select(TestAttempt).where(TestAttempt.candidate_id == candidate.id).order_by(TestAttempt.created_at.desc())
+    )
+    attempts = att_res.scalars().all()
+
+    output = []
+    for a in attempts:
+        # Get role title
+        role_title = None
+        company = None
+        if a.job_description_id:
+            jd_res = await db.execute(select(JobDescription).where(JobDescription.id == a.job_description_id))
+            jd = jd_res.scalar_one_or_none()
+            if jd:
+                role_title = jd.title
+                from app.models.client import Client
+                cl_res = await db.execute(select(Client).where(Client.id == jd.client_id))
+                cl = cl_res.scalar_one_or_none()
+                company = cl.company_name if cl else "TopDev Client"
+        else:
+            # Self-onboarding generic assessment
+            ass_res = await db.execute(select(Assessment).where(Assessment.id == a.assessment_id))
+            ass = ass_res.scalar_one_or_none()
+            role_title = ass.title if ass else "General Screening Test"
+            company = "TopDev"
+
+        output.append({
+            "id": a.id,
+            "token": a.token,
+            "role_title": role_title,
+            "company": company,
+            "status": getattr(a.status, "value", a.status),
+            "total_score": a.total_score,
+            "technical_score": a.technical_score,
+            "communication_score": a.communication_score,
+            "cultural_fit_score": a.cultural_fit_score,
+            "rating_badge": getattr(a.rating_badge, "value", a.rating_badge) if a.rating_badge else None,
+            "is_qualified": a.is_qualified,
+            "ai_feedback": a.ai_feedback,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+            "submitted_at": a.submitted_at.isoformat() if a.submitted_at else None,
+        })
+
+    return output
+
+
 # ─── Test Taking ─────────────────────────────────────────────────────────────
 
 @router.get("/test/{token}")
@@ -139,7 +195,10 @@ async def submit_test(token: str, data: SubmitAnswersRequest, db: AsyncSession =
     # Enqueue scoring task
     score_test_attempt_task.delay(attempt.id)
 
-    return {"message": "Answers submitted successfully. Results will be available shortly."}
+    return {
+        "message": "Answers submitted successfully. Results will be available shortly.",
+        "attempt_id": attempt.id,
+    }
 
 
 @router.get("/results/{attempt_id}")
@@ -149,14 +208,40 @@ async def get_results(attempt_id: int, db: AsyncSession = Depends(get_db), curre
     if not attempt:
         raise HTTPException(404, "Not found")
     return {
-        "status": attempt.status.value,
+        "status": getattr(attempt.status, "value", attempt.status),
         "total_score": attempt.total_score,
         "technical_score": attempt.technical_score,
         "communication_score": attempt.communication_score,
         "cultural_fit_score": attempt.cultural_fit_score,
-        "rating_badge": attempt.rating_badge.value if attempt.rating_badge else None,
+        "rating_badge": getattr(attempt.rating_badge, "value", attempt.rating_badge) if attempt.rating_badge else None,
         "is_qualified": attempt.is_qualified,
+        "ai_feedback": attempt.ai_feedback,
+        "score_breakdown": attempt.score_breakdown,
     }
+
+
+@router.get("/results/by-token/{token}")
+async def get_results_by_token(token: str, db: AsyncSession = Depends(get_db)):
+    """Public endpoint — get results by test token (no auth required, used after submission)."""
+    result = await db.execute(select(TestAttempt).where(TestAttempt.token == token))
+    attempt = result.scalar_one_or_none()
+    if not attempt:
+        raise HTTPException(404, "Not found")
+    if attempt.status not in (AttemptStatus.SUBMITTED, AttemptStatus.SCORED):
+        raise HTTPException(400, "Test not yet submitted")
+    return {
+        "attempt_id": attempt.id,
+        "status": getattr(attempt.status, "value", attempt.status),
+        "total_score": attempt.total_score,
+        "technical_score": attempt.technical_score,
+        "communication_score": attempt.communication_score,
+        "cultural_fit_score": attempt.cultural_fit_score,
+        "rating_badge": getattr(attempt.rating_badge, "value", attempt.rating_badge) if attempt.rating_badge else None,
+        "is_qualified": attempt.is_qualified,
+        "ai_feedback": attempt.ai_feedback,
+        "score_breakdown": attempt.score_breakdown,
+    }
+
 
 # ─── Onboarding & Matching ───────────────────────────────────────────────────
 
@@ -171,6 +256,9 @@ class OnboardRequest(BaseModel):
     linkedin_url: Optional[str] = None
     github_url: Optional[str] = None
     portfolio_url: Optional[str] = None
+    current_salary: Optional[int] = None
+    expected_salary: Optional[int] = None
+    notice_period_days: Optional[int] = None
 
 @router.post("/parse-resume")
 async def parse_resume_endpoint(
@@ -213,6 +301,9 @@ async def onboard_candidate(
     candidate.linkedin_url = data.linkedin_url
     candidate.github_url = data.github_url
     candidate.portfolio_url = data.portfolio_url
+    candidate.current_salary = data.current_salary
+    candidate.expected_salary = data.expected_salary
+    candidate.notice_period_days = data.notice_period_days
     
     await db.commit()
     

@@ -29,6 +29,9 @@ class Candidate(Base):
     headline: Mapped[str | None] = mapped_column(String(500))
     bio: Mapped[str | None] = mapped_column(Text)
     skills: Mapped[dict | None] = mapped_column(JSONB)  # ["Python", "React", ...]
+    current_salary: Mapped[int | None] = mapped_column(Integer)
+    expected_salary: Mapped[int | None] = mapped_column(Integer)
+    notice_period_days: Mapped[int | None] = mapped_column(Integer)  # 0=immediate, 15, 30, 60, 90
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

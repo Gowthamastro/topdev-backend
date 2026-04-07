@@ -22,6 +22,11 @@ def generate_s3_key(folder: str, filename: str) -> str:
 
 async def upload_file(file_bytes: bytes, filename: str, folder: str = "uploads") -> str | None:
     """Upload file to S3, return the S3 key."""
+    if not settings.AWS_ACCESS_KEY_ID:
+        print(f"[MOCK S3] Uploading {filename} to virtual {folder}/")
+        ext = filename.rsplit(".", 1)[-1] if "." in filename else "bin"
+        return f"mock_{folder}/{uuid.uuid4()}.{ext}"
+
     try:
         s3 = get_s3_client()
         key = generate_s3_key(folder, filename)
@@ -40,6 +45,9 @@ async def upload_file(file_bytes: bytes, filename: str, folder: str = "uploads")
 
 def get_signed_url(s3_key: str, expiry: int = None) -> str | None:
     """Generate a pre-signed URL for secure file access."""
+    if not settings.AWS_ACCESS_KEY_ID:
+        return f"https://mock-s3.local/{s3_key}"
+
     try:
         s3 = get_s3_client()
         url = s3.generate_presigned_url(
@@ -54,6 +62,9 @@ def get_signed_url(s3_key: str, expiry: int = None) -> str | None:
 
 
 async def delete_file(s3_key: str) -> bool:
+    if not settings.AWS_ACCESS_KEY_ID:
+        return True
+
     try:
         s3 = get_s3_client()
         s3.delete_object(Bucket=settings.S3_BUCKET_NAME, Key=s3_key)
