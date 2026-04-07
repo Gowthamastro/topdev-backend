@@ -1,5 +1,6 @@
 """Auth routes: register, login, refresh token."""
 from datetime import timedelta
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -27,6 +28,10 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+
+class GoogleLoginRequest(BaseModel):
+    access_token: str
+    role: str = "candidate"
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -101,6 +106,82 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
         role=user.role,
         full_name=user.full_name,
     )
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_auth(data: GoogleLoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    # Verify access_token with Google
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {data.access_token}"}
+            )
+            resp.raise_for_status()
+            user_info = resp.json()
+        except httpx.HTTPError:
+            raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    email = user_info.get("email")
+    full_name = user_info.get("name", "Google User")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account has no email")
+
+    # Check if user already exists
+    existing = await db.execute(select(User).where(User.email == email))
+    user = existing.scalar_one_or_none()
+
+    if not user:
+        # Create user automatically
+        # Assign a random unguessable password since they auth via google
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits
+        random_pwd = ''.join(secrets.choice(alphabet) for i in range(20))
+
+        user = User(
+            email=email,
+            hashed_password=get_password_hash(random_pwd),
+            full_name=full_name,
+            role=data.role,
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()
+
+        # Create profile
+        if data.role == "client":
+            client_profile = Client(user_id=user.id, company_name="Workspace")
+            db.add(client_profile)
+        elif data.role == "candidate":
+            candidate = Candidate(user_id=user.id)
+            db.add(candidate)
+
+        await db.commit()
+        await db.refresh(user)
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account disabled")
+
+    await log_audit_event(
+        db=db,
+        action="login_google",
+        user_id=user.id,
+        resource_type="user",
+        resource_id=str(user.id),
+        details={"email": user.email, "role": user.role},
+        request=request,
+    )
+
+    return TokenResponse(
+        access_token=create_access_token(user.id),
+        refresh_token=create_refresh_token(user.id),
+        user_id=user.id,
+        role=user.role,
+        full_name=user.full_name,
+    )
+
 
 
 class RefreshRequest(BaseModel):
