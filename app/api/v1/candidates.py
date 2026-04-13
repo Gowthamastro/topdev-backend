@@ -20,10 +20,17 @@ except ImportError:
     PyPDF2 = None
 from app.ai.gemini_service import parse_resume_for_profile, generate_assessment
 from app.services.storage_service import upload_file, get_signed_url
-from app.workers.tasks import score_test_attempt_task
+from app.workers.tasks import score_test_attempt_task, compute_integrity_score_task
 from app.core.config import settings
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
+
+
+# ─── Required fields for profile completion ───────────────────────────────────
+PROFILE_REQUIRED_FIELDS = [
+    "phone", "years_of_experience", "current_salary",
+    "expected_salary", "resume_s3_key",
+]
 
 
 @router.get("/profile")
@@ -35,7 +42,12 @@ async def get_profile(db: AsyncSession = Depends(get_db), current_user: User = D
     resume_url = None
     if candidate.resume_s3_key:
         resume_url = get_signed_url(candidate.resume_s3_key)
-    return {**candidate.__dict__, "resume_signed_url": resume_url}
+    return {
+        **candidate.__dict__,
+        "resume_signed_url": resume_url,
+        "is_profile_complete": candidate.is_profile_complete,
+        "phone_verified": candidate.phone_verified,
+    }
 
 
 @router.post("/resume")
@@ -194,6 +206,8 @@ async def submit_test(token: str, data: SubmitAnswersRequest, db: AsyncSession =
 
     # Enqueue scoring task
     score_test_attempt_task.delay(attempt.id)
+    # Enqueue integrity / proctoring analysis
+    compute_integrity_score_task.delay(attempt.id)
 
     return {
         "message": "Answers submitted successfully. Results will be available shortly.",
@@ -304,11 +318,24 @@ async def onboard_candidate(
     candidate.current_salary = data.current_salary
     candidate.expected_salary = data.expected_salary
     candidate.notice_period_days = data.notice_period_days
-    
+
+    # ─── Phase 1: Compute profile completeness ───────────────────────────
+    all_filled = all([
+        current_user.full_name,
+        current_user.email,
+        candidate.phone,
+        candidate.phone_verified,
+        candidate.resume_s3_key,
+        candidate.years_of_experience is not None,
+        candidate.current_salary is not None,
+        candidate.expected_salary is not None,
+    ])
+    candidate.is_profile_complete = all_filled
+
     await db.commit()
     
-    # Generate generic Assessment for this candidate if they provided skills
-    if candidate.skills:
+    # Generate assessment only if feature is enabled
+    if settings.ENABLE_ASSESSMENTS and candidate.skills:
         try:
             gen_data = await generate_assessment(
                 role=data.headline or "Software Engineer",
@@ -362,7 +389,41 @@ async def onboard_candidate(
         except Exception as e:
             print("Failed to generate screening test:", e)
             
-    return {"message": "Onboarding complete"}
+    return {
+        "message": "Onboarding complete",
+        "is_profile_complete": candidate.is_profile_complete,
+    }
+
+
+@router.get("/profile-status")
+async def get_profile_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns a breakdown of which profile fields are complete."""
+    result = await db.execute(select(Candidate).where(Candidate.user_id == current_user.id))
+    candidate = result.scalar_one_or_none()
+    if not candidate:
+        return {"is_profile_complete": False, "completion_percent": 0, "fields": {}}
+
+    fields = {
+        "full_name": bool(current_user.full_name),
+        "email": bool(current_user.email),
+        "phone": bool(candidate.phone),
+        "phone_verified": bool(candidate.phone_verified),
+        "resume": bool(candidate.resume_s3_key),
+        "years_of_experience": candidate.years_of_experience is not None,
+        "current_salary": candidate.current_salary is not None,
+        "expected_salary": candidate.expected_salary is not None,
+    }
+    filled = sum(1 for v in fields.values() if v)
+    total = len(fields)
+
+    return {
+        "is_profile_complete": candidate.is_profile_complete,
+        "completion_percent": int((filled / total) * 100),
+        "fields": fields,
+    }
 
 
 @router.get("/matched-jobs")

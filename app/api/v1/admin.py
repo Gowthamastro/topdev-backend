@@ -295,3 +295,78 @@ async def admin_stats(db: AsyncSession = Depends(get_db), _: User = Depends(requ
         "qualified_candidates": qualified.scalar(),
         "average_score": round(avg_score.scalar() or 0, 2),
     }
+
+
+# ─── Candidate Search (Phase 1) ──────────────────────────────────────────────
+
+@router.get("/candidates")
+async def list_candidates(
+    min_experience: Optional[int] = None,
+    max_experience: Optional[int] = None,
+    min_salary: Optional[int] = None,
+    max_salary: Optional[int] = None,
+    skills: Optional[str] = None,         # comma-separated
+    profile_complete: Optional[bool] = None,
+    search: Optional[str] = None,         # name / email search
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Admin endpoint — searchable, filterable candidate list."""
+    from app.models.candidate import Candidate
+    from app.models.user import User as UserModel
+
+    query = select(Candidate, UserModel).join(UserModel, Candidate.user_id == UserModel.id)
+
+    if min_experience is not None:
+        query = query.where(Candidate.years_of_experience >= min_experience)
+    if max_experience is not None:
+        query = query.where(Candidate.years_of_experience <= max_experience)
+    if min_salary is not None:
+        query = query.where(Candidate.expected_salary >= min_salary)
+    if max_salary is not None:
+        query = query.where(Candidate.expected_salary <= max_salary)
+    if profile_complete is not None:
+        query = query.where(Candidate.is_profile_complete == profile_complete)
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(
+            UserModel.full_name.ilike(pattern) | UserModel.email.ilike(pattern)
+        )
+
+    query = query.order_by(Candidate.updated_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    rows = result.all()
+
+    candidates_out = []
+    for candidate, user in rows:
+        # Optional skill filter (post-query since JSONB array)
+        if skills:
+            wanted = {s.strip().lower() for s in skills.split(",")}
+            cand_skills = {s.lower() for s in (candidate.skills or [])}
+            if not wanted.intersection(cand_skills):
+                continue
+
+        candidates_out.append({
+            "id": candidate.id,
+            "user_id": user.id,
+            "name": user.full_name,
+            "email": user.email,
+            "phone": candidate.phone,
+            "phone_verified": candidate.phone_verified,
+            "years_of_experience": candidate.years_of_experience,
+            "experience_level": candidate.experience_level,
+            "skills": candidate.skills,
+            "current_salary": candidate.current_salary,
+            "expected_salary": candidate.expected_salary,
+            "headline": candidate.headline,
+            "location": candidate.location,
+            "is_profile_complete": candidate.is_profile_complete,
+            "resume_uploaded": bool(candidate.resume_s3_key),
+            "created_at": candidate.created_at,
+            "updated_at": candidate.updated_at,
+        })
+
+    return {"candidates": candidates_out, "total": len(candidates_out)}
+

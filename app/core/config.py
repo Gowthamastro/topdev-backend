@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     DEFAULT_QUALIFICATION_THRESHOLD: int = 60
     DEFAULT_TEST_LINK_EXPIRY_HOURS: int = 48
 
+    # ─── Phase 1 Feature Flags (default OFF) ─────────────────────────────
+    ENABLE_ASSESSMENTS: bool = False
+    ENABLE_AI_FEATURES: bool = False
+    ENABLE_ADVANCED_ANALYTICS: bool = False
+
     @property
     def allowed_origins_list(self) -> List[str]:
         s = (self.ALLOWED_ORIGINS or "").strip()

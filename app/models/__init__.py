@@ -4,6 +4,7 @@ from app.models.candidate import Candidate, ExperienceLevel
 from app.models.job import JobDescription, DifficultyLevel, JDStatus
 from app.models.assessment import Assessment, Question, QuestionType, AssessmentStatus
 from app.models.test_attempt import TestAttempt, AttemptStatus, RatingBadge
+from app.models.proctor import ProctoringEvent, EventType
 from app.models.subscription import Subscription, Payment, SubscriptionStatus
 from app.models.admin import (
     PlatformSettings, EmailTemplate, ScoringWeights,
@@ -17,6 +18,7 @@ __all__ = [
     "JobDescription", "DifficultyLevel", "JDStatus",
     "Assessment", "Question", "QuestionType", "AssessmentStatus",
     "TestAttempt", "AttemptStatus", "RatingBadge",
+    "ProctoringEvent", "EventType",
     "Subscription", "Payment", "SubscriptionStatus",
     "PlatformSettings", "EmailTemplate", "ScoringWeights",
     "FeatureFlag", "RoleTemplate", "AuditLog",

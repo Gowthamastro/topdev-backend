@@ -1,4 +1,6 @@
+from __future__ import annotations
 import enum
+from typing import Optional, Union, List
 from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime, Integer, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -21,12 +23,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), default=UserRole.CANDIDATE.value, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    avatar_url: Mapped[str | None] = mapped_column(String(500))
-    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
+    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    client_profile: Mapped["Client | None"] = relationship("Client", back_populates="user", uselist=False)
-    candidate_profile: Mapped["Candidate | None"] = relationship("Candidate", back_populates="user", uselist=False)
-    audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="user")
+    client_profile: Mapped[Optional["Client"]] = relationship("Client", back_populates="user", uselist=False)
+    candidate_profile: Mapped[Optional["Candidate"]] = relationship("Candidate", back_populates="user", uselist=False)
+    audit_logs: Mapped[List["AuditLog"]] = relationship("AuditLog", back_populates="user")

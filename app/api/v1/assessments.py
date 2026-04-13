@@ -133,7 +133,12 @@ async def list_attempts(jd_id: int, db: AsyncSession = Depends(get_db), current_
         "cultural_fit_score": a.cultural_fit_score,
         "badge": getattr(a.rating_badge, "value", a.rating_badge) if a.rating_badge else None,
         "qualified": a.is_qualified,
-        "ai_feedback": a.ai_feedback
+        "ai_feedback": a.ai_feedback,
+        # Proctoring / Integrity
+        "integrity_score": a.integrity_score,
+        "integrity_flags": a.integrity_flags,
+        "proctor_summary": a.proctor_summary,
+        "proctoring_consented": a.proctoring_consented,
     } for a in attempts]
 
 

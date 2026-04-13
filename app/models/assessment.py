@@ -1,4 +1,5 @@
 import enum
+from typing import Optional, List, Dict
 from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime, Integer, ForeignKey, Text, Numeric, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -23,9 +24,9 @@ class Assessment(Base):
     __tablename__ = "assessments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    job_description_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("job_descriptions.id", ondelete="CASCADE"), index=True, nullable=True)
+    job_description_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("job_descriptions.id", ondelete="CASCADE"), index=True, nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(50), default=AssessmentStatus.ACTIVE.value)
     has_coding_round: Mapped[bool] = mapped_column(Boolean, default=True)
     mcq_count: Mapped[int] = mapped_column(Integer, default=10)
@@ -35,8 +36,8 @@ class Assessment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     job_description: Mapped["JobDescription"] = relationship("JobDescription", back_populates="assessments")
-    questions: Mapped[list["Question"]] = relationship("Question", back_populates="assessment", cascade="all, delete-orphan")
-    test_attempts: Mapped[list["TestAttempt"]] = relationship("TestAttempt", back_populates="assessment")
+    questions: Mapped[List["Question"]] = relationship("Question", back_populates="assessment", cascade="all, delete-orphan")
+    test_attempts: Mapped[List["TestAttempt"]] = relationship("TestAttempt", back_populates="assessment")
 
 
 class Question(Base):
@@ -46,11 +47,11 @@ class Question(Base):
     assessment_id: Mapped[int] = mapped_column(Integer, ForeignKey("assessments.id", ondelete="CASCADE"), index=True)
     question_type: Mapped[str] = mapped_column(String(50), nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
-    options: Mapped[dict | None] = mapped_column(JSONB)           # for MCQ: list of {label, text}
-    correct_answer: Mapped[str | None] = mapped_column(Text)      # for MCQ & scenario
-    explanation: Mapped[str | None] = mapped_column(Text)
-    difficulty: Mapped[str | None] = mapped_column(String(50))
-    skills_tested: Mapped[dict | None] = mapped_column(JSONB)     # list of strings
+    options: Mapped[Optional[Dict]] = mapped_column(JSONB)           # for MCQ: list of {label, text}
+    correct_answer: Mapped[Optional[str]] = mapped_column(Text)      # for MCQ & scenario
+    explanation: Mapped[Optional[str]] = mapped_column(Text)
+    difficulty: Mapped[Optional[str]] = mapped_column(String(50))
+    skills_tested: Mapped[Optional[List[str]]] = mapped_column(JSONB)     # list of strings
     max_score: Mapped[int] = mapped_column(Integer, default=10)
     order_index: Mapped[int] = mapped_column(Integer, default=0)
 

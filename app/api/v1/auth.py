@@ -40,6 +40,7 @@ class TokenResponse(BaseModel):
     user_id: int
     role: str
     full_name: str
+    is_profile_complete: bool = True  # Only relevant for candidates
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -59,6 +60,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     await db.flush()
 
     # Create profile
+    is_complete = True  # Clients/admins don't need profile completion
     if data.role == UserRole.CLIENT:
         if not data.company_name:
             raise HTTPException(status_code=400, detail="company_name required for client registration")
@@ -67,6 +69,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     elif data.role == UserRole.CANDIDATE:
         candidate = Candidate(user_id=user.id)
         db.add(candidate)
+        is_complete = False
 
     await db.commit()
     await db.refresh(user)
@@ -77,6 +80,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         user_id=user.id,
         role=user.role,
         full_name=user.full_name,
+        is_profile_complete=is_complete,
     )
 
 
@@ -88,6 +92,13 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
+
+    # Check profile completion for candidates
+    is_complete = True
+    if user.role == "candidate":
+        cand_res = await db.execute(select(Candidate).where(Candidate.user_id == user.id))
+        cand = cand_res.scalar_one_or_none()
+        is_complete = bool(cand and cand.is_profile_complete)
 
     await log_audit_event(
         db=db,
@@ -105,6 +116,7 @@ async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends
         user_id=user.id,
         role=user.role,
         full_name=user.full_name,
+        is_profile_complete=is_complete,
     )
 
 
@@ -164,6 +176,13 @@ async def google_auth(data: GoogleLoginRequest, request: Request, db: AsyncSessi
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
+    # Check profile completion for candidates
+    is_complete = True
+    if user.role == "candidate":
+        cand_res = await db.execute(select(Candidate).where(Candidate.user_id == user.id))
+        cand = cand_res.scalar_one_or_none()
+        is_complete = bool(cand and cand.is_profile_complete)
+
     await log_audit_event(
         db=db,
         action="login_google",
@@ -180,6 +199,7 @@ async def google_auth(data: GoogleLoginRequest, request: Request, db: AsyncSessi
         user_id=user.id,
         role=user.role,
         full_name=user.full_name,
+        is_profile_complete=is_complete,
     )
 
 
@@ -197,10 +217,18 @@ async def refresh_token(data: RefreshRequest, db: AsyncSession = Depends(get_db)
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found")
+
+    is_complete = True
+    if user.role == "candidate":
+        cand_res = await db.execute(select(Candidate).where(Candidate.user_id == user.id))
+        cand = cand_res.scalar_one_or_none()
+        is_complete = bool(cand and cand.is_profile_complete)
+
     return TokenResponse(
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
         user_id=user.id,
         role=user.role,
         full_name=user.full_name,
+        is_profile_complete=is_complete,
     )
