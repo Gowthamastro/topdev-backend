@@ -21,7 +21,15 @@ class RegisterRequest(BaseModel):
     password: str
     full_name: str
     role: UserRole = UserRole.CANDIDATE
-    company_name: str | None = None  # Required if role=CLIENT
+    # Client fields
+    company_name: str | None = None
+    website: str | None = None
+    hiring_budget: int | None = None
+    # Candidate fields
+    phone: str | None = None
+    location: str | None = None
+    current_salary: int | None = None
+    expected_salary: int | None = None
 
 
 class LoginRequest(BaseModel):
@@ -59,17 +67,29 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
-    # Create profile
-    is_complete = True  # Clients/admins don't need profile completion
+    # Create profile immediately with all available data
+    is_complete = True
     if data.role == UserRole.CLIENT:
         if not data.company_name:
             raise HTTPException(status_code=400, detail="company_name required for client registration")
-        client = Client(user_id=user.id, company_name=data.company_name)
+        client = Client(
+            user_id=user.id,
+            company_name=data.company_name,
+            website=data.website,
+            location=data.location,
+            hiring_budget=data.hiring_budget
+        )
         db.add(client)
     elif data.role == UserRole.CANDIDATE:
-        candidate = Candidate(user_id=user.id)
+        candidate = Candidate(
+            user_id=user.id,
+            phone=data.phone,
+            location=data.location,
+            current_salary=data.current_salary,
+            expected_salary=data.expected_salary,
+            is_profile_complete=True # Since they are signing up from homepage editor, it's complete
+        )
         db.add(candidate)
-        is_complete = False
 
     await db.commit()
     await db.refresh(user)
