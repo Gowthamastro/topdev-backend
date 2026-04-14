@@ -1,4 +1,6 @@
 """Client dashboard APIs — view candidates, ranked results, download profiles."""
+from pydantic import BaseModel
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -128,3 +130,29 @@ async def get_score_breakdown(attempt_id: int, db: AsyncSession = Depends(get_db
         "ai_feedback": attempt.ai_feedback,
         "rating_badge": attempt.rating_badge.value if attempt.rating_badge else None,
     }
+
+class ClientOnboardRequest(BaseModel):
+    company_name: str
+    company_size: Optional[str] = None
+    industry: Optional[str] = None
+    website: Optional[str] = None
+
+@router.post("/onboard")
+async def onboard_client(
+    data: ClientOnboardRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_client),
+):
+    result = await db.execute(select(Client).where(Client.user_id == current_user.id))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(404, "Client not found")
+        
+    client.company_name = data.company_name
+    client.company_size = data.company_size
+    client.industry = data.industry
+    client.website = data.website
+    
+    current_user.is_profile_complete = True
+    await db.commit()
+    return {"message": "Client onboarding complete", "is_profile_complete": True}
