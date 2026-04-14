@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     SECRET_KEY: str = "change-me-in-production"
     # Comma-separated list (works well in .env). Parsed via `allowed_origins_list`.
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000,https://www.topdevhq.com,https://topdevhq.com"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000,https://www.topdevhq.com,https://topdevhq.com,https://topdev.ai,https://www.topdev.ai"
     API_V1_PREFIX: str = "/api/v1"
 
     # Database
