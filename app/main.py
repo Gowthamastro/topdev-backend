@@ -74,10 +74,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    log.error("unhandled_exception", path=request.url.path, error=str(exc))
+    error_msg = str(exc)
+    log.error("unhandled_exception", path=request.url.path, error=error_msg)
     return JSONResponse(
         status_code=500, 
-        content={"detail": "Internal server error"},
+        content={"detail": f"Internal server error: {error_msg}"},
         headers={
             "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
             "Access-Control-Allow-Credentials": "true"
