@@ -136,6 +136,8 @@ class ClientOnboardRequest(BaseModel):
     company_size: Optional[str] = None
     industry: Optional[str] = None
     website: Optional[str] = None
+    location: Optional[str] = None
+    hiring_budget: Optional[int] = None
 
 @router.post("/onboard")
 async def onboard_client(
@@ -152,6 +154,8 @@ async def onboard_client(
     client.company_size = data.company_size
     client.industry = data.industry
     client.website = data.website
+    client.location = data.location
+    client.hiring_budget = data.hiring_budget
     
     current_user.is_profile_complete = True
     await db.commit()

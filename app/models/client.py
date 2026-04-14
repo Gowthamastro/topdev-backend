@@ -22,6 +22,8 @@ class Client(Base):
     company_size: Mapped[Optional[str]] = mapped_column(String(50))
     industry: Mapped[Optional[str]] = mapped_column(String(100))
     website: Mapped[Optional[str]] = mapped_column(String(255))
+    location: Mapped[Optional[str]] = mapped_column(String(255))
+    hiring_budget: Mapped[Optional[int]] = mapped_column(Integer)
     logo_url: Mapped[Optional[str]] = mapped_column(String(500))
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True)
     subscription_plan: Mapped[str] = mapped_column(String(50), default=SubscriptionPlan.FREE.value)

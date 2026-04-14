@@ -324,9 +324,8 @@ async def onboard_candidate(
         current_user.full_name,
         current_user.email,
         candidate.phone,
-        candidate.phone_verified,
+        candidate.location,
         candidate.resume_s3_key,
-        candidate.years_of_experience is not None,
         candidate.current_salary is not None,
         candidate.expected_salary is not None,
     ])
