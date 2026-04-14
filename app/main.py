@@ -95,9 +95,9 @@ async def health_check():
 @app.on_event("startup")
 async def startup():
     log.info("TopDev API starting", env=settings.APP_ENV)
-    # Automatically run migrations on startup (blocking, but fast for head updates)
+    # Automatically run migrations on startup (async DDL fallback + Alembic)
     from app.core.migrations import run_migrations
-    run_migrations()
+    await run_migrations()
 
 @app.on_event("shutdown")
 async def shutdown():
